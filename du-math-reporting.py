@@ -24,13 +24,14 @@ class ReportEntry:
     total_score: int = 0
     placement: str = ''
 
+
 load_dotenv()
 canvas_access_token = os.getenv('CANVAS_ACCESS_TOKEN')
 
 
 def get_quiz_url():
     """
-    Gets user input of the URL of a Canvas quiz.
+    Prompts the user to input the URL of a Canvas quiz.
     """
     print('Dominican University')
     print('Mathematics Placement Exam Reporting Tool')
@@ -41,22 +42,25 @@ def get_quiz_url():
 
 def parse_quiz_url(quiz_url):
     """
-    Parses the input quiz URL to get the course ID and assignment ID.
+    Parses the quiz URL to get the course ID, quiz ID, and assignment ID.
     """
     quiz_url_format = '\Ahttps://dominicanu.instructure.com/courses/[1-9][0-9]*/quizzes/[1-9][0-9]*\Z'
     if re.findall(quiz_url_format, quiz_url):
         course_id = re.search('/courses/(.+?)/quizzes/', quiz_url).group(1)
+        print(f'Parsed course ID is >{course_id}<.')
         quiz_id = re.search('/quizzes/(.*)$', quiz_url).group(1)
+        print(f'Parsed quiz ID is >{quiz_id}<.')
         url = 'https://dominicanu.instructure.com/api/v1/courses/' + course_id + '/quizzes/' + quiz_id
         payload = {}
         headers= {'Authorization': 'Bearer ' + canvas_access_token}
         response = requests.request("GET", url, headers=headers, data=payload)
+        print(f'Response status code is >{response.status_code}<.')
         if (response.status_code == 200):
              return course_id, quiz_id, str(response.json()['assignment_id'])
             
     print('The format of the URL provided is not valid.')
     print('I expected something like "https://dominicanu.instructure.com/courses/[number]/quizzes/[number]".')
-    return '0', '0'
+    return '0', '0', '0'
 
 
 def initialize_workbook():
@@ -64,7 +68,7 @@ def initialize_workbook():
     Creates an Excel workbook, a worksheet, and sets up column headers for the report.
     """
     workbook = xlsxwriter.Workbook('Math Placements ' + quiz_id + '.xlsx')
-    worksheet = workbook.add_worksheet('Math Placements')
+    worksheet = workbook.add_worksheet('Math Placements ' + quiz_id)
     worksheet.write(0, 0, 'Student Name')
     worksheet.write(0, 1, 'Student ID')
     worksheet.write(0, 2, 'Attempts')
@@ -80,6 +84,9 @@ def initialize_workbook():
 
 
 def get_submissions():
+    """
+    Creates a list of student submissions for a given assignment.
+    """
     submissions = []
 
     # Get the first page of submissions
@@ -93,9 +100,6 @@ def get_submissions():
             submissions.append(raw_response)
 
     # If there are additional pages of submissions, get those as well
-
-    print(type(response.links))
-
     while 'next' in response.links:
         url = response.links['next']['url']
         payload = {}
@@ -167,58 +171,51 @@ def process_submission(submission):
     return report_entry
 
 
-def main():
-    quiz_url = get_quiz_url()
-    course_id, quiz_id, assignment_id = parse_quiz_url(quiz_url)
+quiz_url = get_quiz_url()
+course_id, quiz_id, assignment_id = parse_quiz_url(quiz_url)
 
-    if course_id != '0' and assignment_id != '0':
-        workbook, worksheet, col, row = initialize_workbook()
-        submissions = get_submissions()
+if course_id != '0' and assignment_id != '0':
+    workbook, worksheet, col, row = initialize_workbook()
+    submissions = get_submissions()
 
-        for submission in submissions:
-            if submission['workflow_state'] == 'graded':
-                report_entry = process_submission(submission)
+    for submission in submissions:
+        if submission['workflow_state'] == 'graded':
+            report_entry = process_submission(submission)
 
-                print('Student Name: ' + report_entry.student_name)
-                print('Student ID: ' + report_entry.student_sis_id)
-                print('Attempts: ' + str(report_entry.attempts))
-                print('Best Attempt: ' + str(report_entry.best_attempt))
-                print('Q01 - Q08 Subscore: ' + str(report_entry.subscore_q01_to_q08))
-                print('Q09 - Q16 Subscore: ' + str(report_entry.subscore_q09_to_q16))
-                print('Q17 - Q24 Subscore: ' + str(report_entry.subscore_q17_to_q24))
-                print('Q25 - Q32 Subscore: ' + str(report_entry.subscore_q25_to_q32))
-                print('Q33 - Q36 Subscore: ' + str(report_entry.subscore_q33_to_q36))
-                print('Total Score: ' + str(report_entry.total_score))
-                print('Placement: ' + report_entry.placement)
+            print('Student Name: ' + report_entry.student_name)
+            print('Student ID: ' + report_entry.student_sis_id)
+            print('Attempts: ' + str(report_entry.attempts))
+            print('Best Attempt: ' + str(report_entry.best_attempt))
+            print('Q01 - Q08 Subscore: ' + str(report_entry.subscore_q01_to_q08))
+            print('Q09 - Q16 Subscore: ' + str(report_entry.subscore_q09_to_q16))
+            print('Q17 - Q24 Subscore: ' + str(report_entry.subscore_q17_to_q24))
+            print('Q25 - Q32 Subscore: ' + str(report_entry.subscore_q25_to_q32))
+            print('Q33 - Q36 Subscore: ' + str(report_entry.subscore_q33_to_q36))
+            print('Total Score: ' + str(report_entry.total_score))
+            print('Placement: ' + report_entry.placement)
 
-                worksheet.write(row, col, report_entry.student_name)
-                col += 1
-                worksheet.write(row, col, int(report_entry.student_sis_id))
-                col += 1
-                worksheet.write(row, col, report_entry.attempts)
-                col += 1
-                worksheet.write(row, col, report_entry.best_attempt)
-                col += 1
-                worksheet.write(row, col, report_entry.subscore_q01_to_q08)
-                col += 1
-                worksheet.write(row, col, report_entry.subscore_q09_to_q16)
-                col += 1
-                worksheet.write(row, col, report_entry.subscore_q17_to_q24)
-                col += 1
-                worksheet.write(row, col, report_entry.subscore_q25_to_q32)
-                col += 1
-                worksheet.write(row, col, report_entry.subscore_q33_to_q36)
-                col += 1
-                worksheet.write(row, col, report_entry.total_score)
-                col += 1
-                worksheet.write(row, col, report_entry.placement)
-                col = 0
-                row += 1
+            worksheet.write(row, col, report_entry.student_name)
+            col += 1
+            worksheet.write(row, col, int(report_entry.student_sis_id))
+            col += 1
+            worksheet.write(row, col, report_entry.attempts)
+            col += 1
+            worksheet.write(row, col, report_entry.best_attempt)
+            col += 1
+            worksheet.write(row, col, report_entry.subscore_q01_to_q08)
+            col += 1
+            worksheet.write(row, col, report_entry.subscore_q09_to_q16)
+            col += 1
+            worksheet.write(row, col, report_entry.subscore_q17_to_q24)
+            col += 1
+            worksheet.write(row, col, report_entry.subscore_q25_to_q32)
+            col += 1
+            worksheet.write(row, col, report_entry.subscore_q33_to_q36)
+            col += 1
+            worksheet.write(row, col, report_entry.total_score)
+            col += 1
+            worksheet.write(row, col, report_entry.placement)
+            col = 0
+            row += 1
 
-        workbook.close()
-
-
-if __name__ == '__main__':
-    main()
-
-
+    workbook.close()
